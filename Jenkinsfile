@@ -28,7 +28,14 @@ node{
     }
    sh 'docker push gowthamragavan/ramweb:0.0.2'
    }
-   
+        
+   stage('Nexus Image Push'){
+   withCredentials([string(credentialsId: 'nexusPass', variable: 'nexusPassword')]) {
+   sh "docker login -u admin -p ${nexusPassword} 18.132.40.184:8083"
+   sh "docker tag gowthamragavan/ramweb:0.0.2 18.132.40.184:8083/ramweb:1.0.0"
+   sh 'docker push 18.132.40.184:8083/ramweb:1.0.0'
+   }
+        
    stage('Remove Previous Container'){
 	try{
 		sh 'docker rm -f tomcattest'
