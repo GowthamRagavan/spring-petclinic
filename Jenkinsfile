@@ -12,7 +12,12 @@ node{
       sh './mvnw clean package'
 	  sh 'mv target/spring-petclinic*.jar target/ramapp.jar'
    }
-   
+   stage('SonarQube Analysis') {
+	                  
+	        withSonarQubeEnv('sonar') { 
+                   sh './mvnw  sonar:sonar'      
+	          }
+	    }
    stage('Build Docker Imager'){
    sh 'docker build -t gowthamragavan/ramweb:0.0.2 .'
    }
