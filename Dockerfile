@@ -1,4 +1,5 @@
-FROM openjdk:12-alpine
+FROM openjdk:8
 # Take the war and copy to webapps of tomcat
-COPY target/ramapp.jar /ramapp.jar
-RUN java -jar /*.jar
+ADD target/ramapp.jar ramapp.jar
+EXPOSE 9001
+ENTRYPOINT ["java", "-jar", "ramapp.jar"]
