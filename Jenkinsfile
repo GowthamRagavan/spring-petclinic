@@ -32,7 +32,7 @@ node{
 	}
 	
    stage('Docker deployment'){
-   sh 'docker run -d -p 8090:8080 --name tomcattest gowthamragavan/ramweb:0.0.2' 
+   sh 'docker run -d -p 9001:9001 --name tomcattest gowthamragavan/ramweb:0.0.2' 
    }   
    }
 }
