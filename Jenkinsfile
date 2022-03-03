@@ -1,51 +1,115 @@
-node{
-   stage('SCM Checkout'){
-    sh 'rm -rf spring-petclinic'
-    sh 'git clone https://github.com/GowthamRagavan/spring-petclinic.git'
-    sh 'rsync -a spring-petclinic/ .'
-   }
-   
-   stage('Compile-Package'){
-
-      //def mvnHome =  tool name: 'maven3', type: 'maven'   
-      //sh "${mvnHome}/bin/mvn clean package"
-      sh './mvnw clean package'
-	  sh 'mv target/spring-petclinic*.jar target/ramapp.jar'
-   }
-   stage('SonarQube Analysis') {
-	                  
-	        withSonarQubeEnv('sonar') { 
-                   sh './mvnw  sonar:sonar'      
-	          }
-	    }
-   stage('Build Docker Imager'){
-   sh 'docker build -t gowthamragavan/ramweb:0.0.2 .'
-   }
-   
-   stage('Docker Image Push'){
-   withCredentials([string(credentialsId: 'dockerPass', variable: 'dockerPassword')]) {
-   sh "docker login -u gowthamragavan -p ${dockerPassword}"
+pipeline{
+    agent any
+    environment{
+        VERSION = "${env.BUILD_ID}"
+        url = "${env.BUILD_URL}"
     }
-   sh 'docker push gowthamragavan/ramweb:0.0.2'
-   }
+
+    stages{
+        stage("Sonar Quality Check"){
+            agent{
+                docker {
+                    image 'openjdk:8'
+                }
+            }
+            steps{
+                script{
+                    withSonarQubeEnv(credentialsId: 'sonar-token') {
+                            sh 'chmod +x gradlew'
+                            sh './gradlew sonarqube'
+                    }
+
+                    timeout(time: 1, unit: 'HOURS') {
+                      def qg = waitForQualityGate()
+                      if (qg.status != 'OK') {
+                           error "Pipeline aborted due to quality gate failure: ${qg.status}"
+                      }
+                    }
+
+                }
+            }
+
+        }
+
+        stage("docker build & docker push"){
+            steps{
+                script{
+                    withCredentials([string(credentialsId: 'docker_pass', variable: 'docker_password')]) {
+                             sh '''
+                                docker build -t 18.169.53.99:8083/springapp:${VERSION} .
+                                docker login -u admin -p $docker_password 18.169.53.99:8083 
+                                docker push  18.169.53.99:8083/springapp:${VERSION}
+                                docker rmi 18.169.53.99:8083/springapp:${VERSION}
+                            '''
+                    }
+                }
+            }
+        }
+        stage('indentifying misconfigs using datree in helm charts'){
+            steps{
+                script{
+
+                    dir('kubernetes/') {
+                        withEnv(['DATREE_TOKEN=fsQNDSGM8uAhuLwXfsuSWU']) {
+                              sh 'helm datree test myapp/'
+                        }
+                    }
+                }
+            }
+        }
+        stage("pushing the helm charts to nexus"){
+            steps{
+                script{
+                    withCredentials([string(credentialsId: 'docker_pass', variable: 'docker_password')]) {
+                          dir('kubernetes/') {
+                             sh '''
+                                 helmversion=$( helm show chart myapp | grep version | cut -d: -f 2 | tr -d ' ')
+                                 tar -czvf  myapp-${helmversion}.tgz myapp/
+                                 curl -u admin:$docker_password http://18.169.53.99:8081/repository/helm-hosted/ --upload-file myapp-${helmversion}.tgz -v
+                            '''
+                          }
+                    }
+                }
+            }
+        }
+        stage('manual approval'){
+            steps{
+                script{
+                    timeout(10) {
+                        mail bcc: '', body: "<br>Project: ${env.JOB_NAME} <br>Build Number: ${env.BUILD_NUMBER} <br> Go to build url and approve the deployment request <br> URL de build: ${env.BUILD_URL}", cc: '', charset: 'UTF-8', from: '', mimeType: 'text/html', replyTo: '', subject: "${currentBuild.result} CI: Project name -> ${env.JOB_NAME}", to: "gowthampreparation@gmail.com";  
+                        input(id: "Deploy Gate", message: "Deploy ${params.project_name}?", ok: 'Deploy')
+                    }
+                }
+            }
+        }
+
+        stage('Deploying application on k8s cluster') {
+            steps {
+               script{
+                   withCredentials([kubeconfigFile(credentialsId: 'kubernetes-config', variable: 'KUBECONFIG')]) {
+                        dir('kubernetes/') {
+                          sh 'helm upgrade --install --set image.repository="18.169.53.99:8083/springapp" --set image.tag="${VERSION}" myjavaapp myapp/ ' 
+                        }
+                    }
+               }
+            }
+        }
+        stage('verifying app deployment'){
+            steps{
+                script{
+                     withCredentials([kubeconfigFile(credentialsId: 'kubernetes-config', variable: 'KUBECONFIG')]) {
+                         sh 'kubectl run curl --image=curlimages/curl -i --rm --restart=Never -- curl myjavaapp-myapp:8080'
+
+                     }
+                }
+            }
+        }
+
         
-   stage('Nexus Image Push'){
-   withCredentials([string(credentialsId: 'nexusPass', variable: 'nexusPassword')]) {
-   sh "docker login -u admin -p ${nexusPassword} 18.132.40.184:8083"
-   }
-   sh "docker tag gowthamragavan/ramweb:0.0.2 18.132.40.184:8083/ramweb:1.0.0"
-   sh 'docker push 18.132.40.184:8083/ramweb:1.0.0'
-   }
-        
-   stage('Remove Previous Container'){
-	try{
-		sh 'docker rm -f tomcattest'
-	}catch(error){
-		//  do nothing if there is an exception
-	}
-	
-   stage('Docker deployment'){
-   sh 'docker run -d -p 9001:9001 --name tomcattest gowthamragavan/ramweb:0.0.2' 
-   }   
-   }
+    }
+    post {
+		always {
+			mail bcc: '', body: "<br>Project: ${env.JOB_NAME} <br>Build Number: ${env.BUILD_NUMBER} <br> URL de build: ${url}", cc: '', charset: 'UTF-8', from: '', mimeType: 'text/html', replyTo: '', subject: "${currentBuild.result} CI: Project name -> ${env.JOB_NAME}", to: "gowthampreparation@gmail.com";  
+		 }
+	   }    
 }

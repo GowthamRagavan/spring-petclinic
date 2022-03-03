@@ -1,5 +1,10 @@
-FROM openjdk:8
-# Take the war and copy to webapps of tomcat
-ADD target/ramapp.jar ramapp.jar
-EXPOSE 9001
-ENTRYPOINT ["java", "-jar", "ramapp.jar"]
+FROM openjdk:8 as base 
+WORKDIR /app
+COPY . . 
+RUN chmod +x gradlew
+RUN ./gradlew build 
+
+FROM tomcat:9
+WORKDIR webapps
+COPY --from=base /app/build/libs/sampleWeb-0.0.1-SNAPSHOT.war .
+RUN rm -rf ROOT && mv sampleWeb-0.0.1-SNAPSHOT.war ROOT.war
