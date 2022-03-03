@@ -15,7 +15,7 @@ pipeline{
             steps{
                 script{
                     withSonarQubeEnv(credentialsId: 'sonar-token') {
-                            sh './mvnw  sonar:sonar'                            
+                            sh './mvnw  sonar:sonar-token'                            
                     }
 
                     timeout(time: 1, unit: 'HOURS') {
