@@ -1,8 +1,7 @@
 FROM openjdk:8 as base 
 WORKDIR /app
 COPY . . 
-RUN chmod +x gradlew
-RUN ./gradlew build 
+RUN ./mvnw clean package
 
 FROM tomcat:9
 WORKDIR webapps
