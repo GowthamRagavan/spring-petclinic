@@ -1,4 +1,4 @@
-FROM openjdk:11 as base 
+FROM openjdk:8 as base 
 WORKDIR /app
 COPY . . 
 RUN ./mvnw clean package

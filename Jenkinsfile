@@ -9,13 +9,13 @@ pipeline{
         stage("Sonar Quality Check"){
             agent{
                 docker {
-                    image 'openjdk:11'
+                    image 'openjdk:8'
                 }
             }
             steps{
                 script{
                     withSonarQubeEnv(credentialsId: 'sonar-token') {
-                            sh './mvnw  sonar:sonar-token'                            
+                            sh './mvnw  sonarqube:sonarqube'                            
                     }
 
                     timeout(time: 1, unit: 'HOURS') {
